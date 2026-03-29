@@ -4,7 +4,7 @@ Simple test runner for PawPal+ tests (alternative to pytest)
 
 import sys
 import traceback
-from tests.test_pawpal import TestTask, TestPet, TestOwner, TestScheduler
+from tests.test_pawpal import TestTask, TestPet, TestOwner, TestScheduler, TestSchedulerAlgorithms
 
 
 def run_test_class(test_class):
@@ -39,7 +39,7 @@ def main():
     total_passed = 0
     total_failed = 0
     
-    test_classes = [TestTask, TestPet, TestOwner, TestScheduler]
+    test_classes = [TestTask, TestPet, TestOwner, TestScheduler, TestSchedulerAlgorithms]
     
     for test_class in test_classes:
         passed, failed = run_test_class(test_class)

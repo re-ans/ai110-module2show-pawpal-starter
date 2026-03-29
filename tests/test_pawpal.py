@@ -299,6 +299,379 @@ class TestScheduler:
         assert task2 in plan
 
 
+class TestSchedulerAlgorithms:
+    """Test cases for Scheduler algorithmic methods (sorting, filtering, conflicts, recurrence)."""
+    
+    # ========================================================================
+    # SORTING TESTS
+    # ========================================================================
+    
+    def test_sort_by_time_chronological_order(self):
+        """Verify tasks are sorted chronologically by earliest_time."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        # Add tasks out of order
+        task_14 = Task("Afternoon Walk", 30, 4, "walk", "Buddy", earliest_time=14, latest_time=18)
+        task_6 = Task("Morning Walk", 45, 5, "walk", "Buddy", earliest_time=6, latest_time=9)
+        task_19 = Task("Evening Walk", 30, 5, "walk", "Buddy", earliest_time=19, latest_time=21)
+        task_12 = Task("Lunch Time", 15, 3, "feeding", "Buddy", earliest_time=12, latest_time=14)
+        
+        pet.add_task(task_14)
+        pet.add_task(task_6)
+        pet.add_task(task_19)
+        pet.add_task(task_12)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        tasks_to_sort = [task_14, task_6, task_19, task_12]
+        
+        sorted_tasks = scheduler.sort_by_time(tasks_to_sort)
+        
+        # Verify chronological order
+        assert sorted_tasks[0].earliest_time == 6
+        assert sorted_tasks[1].earliest_time == 12
+        assert sorted_tasks[2].earliest_time == 14
+        assert sorted_tasks[3].earliest_time == 19
+        
+        # Verify they're the same tasks, just reordered
+        assert sorted_tasks[0] == task_6
+        assert sorted_tasks[1] == task_12
+        assert sorted_tasks[2] == task_14
+        assert sorted_tasks[3] == task_19
+    
+    def test_sort_by_time_tiebreaker_priority(self):
+        """Verify that within same time window, higher priority tasks come first."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        # Two tasks with same earliest_time but different priorities
+        task_low_priority = Task("Grooming", 30, 2, "grooming", "Buddy", earliest_time=9, latest_time=12)
+        task_high_priority = Task("Feeding", 10, 5, "feeding", "Buddy", earliest_time=9, latest_time=12)
+        
+        owner.add_pet(pet)
+        scheduler = Scheduler(owner=owner)
+        
+        # Add in low-first order
+        tasks = [task_low_priority, task_high_priority]
+        sorted_tasks = scheduler.sort_by_time(tasks)
+        
+        # High priority should come first (tiebreaker)
+        assert sorted_tasks[0].priority == 5
+        assert sorted_tasks[1].priority == 2
+    
+    # ========================================================================
+    # FILTERING TESTS
+    # ========================================================================
+    
+    def test_filter_by_pet_returns_correct_tasks(self):
+        """Verify filter_by_pet returns only tasks for that pet."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        buddy = Pet("Buddy", "Dog", 3)
+        whiskers = Pet("Whiskers", "Cat", 5)
+        
+        buddy_walk = Task("Walk", 30, 5, "walk", "Buddy")
+        buddy_feed = Task("Feed", 10, 4, "feeding", "Buddy")
+        whiskers_feed = Task("Feed", 5, 5, "feeding", "Whiskers")
+        
+        buddy.add_task(buddy_walk)
+        buddy.add_task(buddy_feed)
+        whiskers.add_task(whiskers_feed)
+        
+        owner.add_pet(buddy)
+        owner.add_pet(whiskers)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        buddy_tasks = scheduler.filter_by_pet("Buddy")
+        whiskers_tasks = scheduler.filter_by_pet("Whiskers")
+        
+        assert len(buddy_tasks) == 2
+        assert len(whiskers_tasks) == 1
+        assert buddy_walk in buddy_tasks
+        assert buddy_feed in buddy_tasks
+        assert whiskers_feed in whiskers_tasks
+        assert whiskers_feed not in buddy_tasks
+    
+    def test_filter_by_status_separates_completed(self):
+        """Verify filter_by_status correctly separates pending and completed tasks."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        task1 = Task("Walk", 30, 5, "walk", "Buddy")
+        task2 = Task("Feed", 10, 4, "feeding", "Buddy")
+        task3 = Task("Play", 20, 3, "enrichment", "Buddy")
+        
+        pet.add_task(task1)
+        pet.add_task(task2)
+        pet.add_task(task3)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        # Initially all pending
+        pending = scheduler.filter_by_status(completed=False)
+        completed = scheduler.filter_by_status(completed=True)
+        
+        assert len(pending) == 3
+        assert len(completed) == 0
+        
+        # Mark two as complete
+        task1.mark_complete()
+        task2.mark_complete()
+        
+        pending = scheduler.filter_by_status(completed=False)
+        completed = scheduler.filter_by_status(completed=True)
+        
+        assert len(pending) == 1
+        assert len(completed) == 2
+        assert task3 in pending
+        assert task1 in completed
+        assert task2 in completed
+    
+    def test_filter_by_category_groups_tasks(self):
+        """Verify filter_by_category returns only tasks in that category."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        walk1 = Task("Morning Walk", 30, 5, "walk", "Buddy")
+        walk2 = Task("Evening Walk", 30, 5, "walk", "Buddy")
+        feed = Task("Feeding", 10, 4, "feeding", "Buddy")
+        play = Task("Playtime", 20, 3, "enrichment", "Buddy")
+        
+        pet.add_task(walk1)
+        pet.add_task(walk2)
+        pet.add_task(feed)
+        pet.add_task(play)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        walks = scheduler.filter_by_category("walk")
+        feedings = scheduler.filter_by_category("feeding")
+        enrichment = scheduler.filter_by_category("enrichment")
+        
+        assert len(walks) == 2
+        assert len(feedings) == 1
+        assert len(enrichment) == 1
+        assert walk1 in walks
+        assert walk2 in walks
+        assert feed in feedings
+        assert play in enrichment
+    
+    # ========================================================================
+    # CONFLICT DETECTION TESTS
+    # ========================================================================
+    
+    def test_detect_conflicts_finds_same_pet_overlap(self):
+        """Verify conflict detection finds tasks for the same pet with overlapping times."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        # Two tasks that overlap (6-9 and 8-12 overlap)
+        task1 = Task("Morning Walk", 45, 5, "walk", "Buddy", earliest_time=6, latest_time=9)
+        task2 = Task("Training", 30, 4, "enrichment", "Buddy", earliest_time=8, latest_time=12)
+        
+        pet.add_task(task1)
+        pet.add_task(task2)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        conflicts = scheduler.detect_conflicts([task1, task2])
+        
+        assert len(conflicts) == 1
+        conflict_task1, conflict_task2, msg = conflicts[0]
+        assert "SAME PET" in msg
+        assert "Morning Walk" in msg
+        assert "Training" in msg
+    
+    def test_detect_conflicts_no_false_positives_non_overlapping(self):
+        """Verify no conflict detected for non-overlapping tasks."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        # Non-overlapping: 6-9 and 10-12
+        task1 = Task("Morning Walk", 30, 5, "walk", "Buddy", earliest_time=6, latest_time=9)
+        task2 = Task("Lunch Feed", 10, 4, "feeding", "Buddy", earliest_time=10, latest_time=12)
+        
+        pet.add_task(task1)
+        pet.add_task(task2)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        conflicts = scheduler.detect_conflicts([task1, task2])
+        
+        assert len(conflicts) == 0
+    
+    def test_detect_conflicts_different_pets_informational(self):
+        """Verify conflicts for different pets are marked as TIMING CONFLICT (not SAME PET)."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        buddy = Pet("Buddy", "Dog", 3)
+        whiskers = Pet("Whiskers", "Cat", 5)
+        
+        buddy_walk = Task("Walk", 30, 5, "walk", "Buddy", earliest_time=6, latest_time=9)
+        whiskers_feed = Task("Feed", 10, 4, "feeding", "Whiskers", earliest_time=8, latest_time=12)
+        
+        buddy.add_task(buddy_walk)
+        whiskers.add_task(whiskers_feed)
+        owner.add_pet(buddy)
+        owner.add_pet(whiskers)
+        
+        scheduler = Scheduler(owner=owner)
+        conflicts = scheduler.detect_conflicts([buddy_walk, whiskers_feed])
+        
+        assert len(conflicts) == 1
+        conflict_task1, conflict_task2, msg = conflicts[0]
+        assert "TIMING CONFLICT" in msg  # Different pets, so TIMING CONFLICT not SAME PET
+        assert "Buddy" in msg
+        assert "Whiskers" in msg
+    
+    # ========================================================================
+    # RECURRING TASK TESTS
+    # ========================================================================
+    
+    def test_create_recurring_task_copies_daily_task(self):
+        """Verify create_recurring_task creates a new incomplete copy of a daily task."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        daily_walk = Task(
+            name="Daily Morning Walk",
+            duration=45,
+            priority=5,
+            category="walk",
+            pet_name="Buddy",
+            frequency="daily",
+            earliest_time=6,
+            latest_time=9,
+            completed=False
+        )
+        
+        pet.add_task(daily_walk)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        # Create recurring instance
+        next_walk = scheduler.create_recurring_task(daily_walk)
+        
+        assert next_walk is not None
+        assert next_walk.name == daily_walk.name
+        assert next_walk.duration == daily_walk.duration
+        assert next_walk.priority == daily_walk.priority
+        assert next_walk.completed == False
+        assert next_walk.category == daily_walk.category
+        assert next_walk.pet_name == daily_walk.pet_name
+    
+    def test_create_recurring_task_returns_none_for_non_recurring(self):
+        """Verify create_recurring_task returns None for one-time tasks."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        one_time_task = Task(
+            name="One-time grooming",
+            duration=60,
+            priority=3,
+            category="grooming",
+            pet_name="Buddy",
+            frequency="once"  # Non-recurring
+        )
+        
+        pet.add_task(one_time_task)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        next_task = scheduler.create_recurring_task(one_time_task)
+        
+        assert next_task is None
+    
+    def test_mark_task_complete_with_recurrence_auto_creates_next(self):
+        """Verify mark_task_complete_with_recurrence marks task done and creates next instance."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        daily_walk = Task(
+            name="Daily Walk",
+            duration=45,
+            priority=5,
+            category="walk",
+            pet_name="Buddy",
+            frequency="daily",
+            earliest_time=6,
+            latest_time=9
+        )
+        
+        pet.add_task(daily_walk)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        # Initially 1 task
+        assert len(pet.tasks) == 1
+        
+        # Mark complete with recurrence
+        scheduler.mark_task_complete_with_recurrence(daily_walk, pet)
+        
+        # Now 2 tasks: original marked complete + new copy
+        assert len(pet.tasks) == 2
+        assert pet.tasks[0].completed == True  # Original is done
+        assert pet.tasks[1].completed == False  # New copy is pending
+        assert pet.tasks[1].name == daily_walk.name
+    
+    # ========================================================================
+    # EDGE CASES
+    # ========================================================================
+    
+    def test_empty_pet_has_no_tasks(self):
+        """Verify a pet with no tasks returns empty list from scheduler."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)  # No tasks added
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        plan = scheduler.generate_daily_plan()
+        assert len(plan) == 0
+    
+    def test_all_tasks_completed_returns_empty_plan(self):
+        """Verify plan is empty when all tasks are marked complete."""
+        owner = Owner(name="Alice", available_hours_per_day=8)
+        pet = Pet("Buddy", "Dog", 3)
+        
+        task1 = Task("Walk", 30, 5, "walk", "Buddy")
+        task2 = Task("Feed", 10, 4, "feeding", "Buddy")
+        
+        pet.add_task(task1)
+        pet.add_task(task2)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        # Mark all complete
+        task1.mark_complete()
+        task2.mark_complete()
+        
+        plan = scheduler.generate_daily_plan()
+        assert len(plan) == 0
+    
+    def test_single_task_schedule(self):
+        """Verify scheduling works correctly with just one task."""
+        owner = Owner(name="Alice", available_hours_per_day=1)  # Only 60 minutes
+        pet = Pet("Buddy", "Dog", 3)
+        
+        single_task = Task("Quick Walk", 45, 5, "walk", "Buddy")
+        
+        pet.add_task(single_task)
+        owner.add_pet(pet)
+        
+        scheduler = Scheduler(owner=owner)
+        
+        plan = scheduler.generate_daily_plan()
+        assert len(plan) == 1
+        assert plan[0] == single_task
+        assert scheduler.validate_schedule(plan) == True
+
+
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, '/Users/anngo/Code/codepath/ai110-module2show-pawpal-starter')
