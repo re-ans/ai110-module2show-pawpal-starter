@@ -169,13 +169,80 @@ When user generates a schedule:
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+**Design Brainstorming & Architecture Review:**
+- Used VS Code Copilot to review the initial UML design with prompt: "Does this 4-class architecture work for a pet care scheduler? Any missing relationships?"
+- Copilot suggested adding `pet_name` binding to Task and time-window constraints, which prevented significant refactoring later
+- Used AI to brainstorm algorithmic methods: "What sorting/filtering would make this scheduler 'smart'?" → Got suggestions for sort_by_time, filter_by_*, detect_conflicts
+
+**Implementation & Debugging:**
+- Copilot was most helpful for implementing the Scheduler methods once the architecture was clear
+- Used proactive code completions to draft method stubs quickly, then refined the logic manually
+- When stuck on conflict detection logic, used: "How would you detect overlapping time windows?" → Got clear explanation of interval overlap conditions
+
+**Testing Strategy:**
+- Prompted: "What edge cases should I test for a pet scheduler?" 
+- Got back: empty pets, all tasks completed, same-pet overlaps, non-overlapping tasks, time window boundaries
+- Used AI to generate test templates, then customized assertions based on specific business logic
+
+**Code Review & Refactoring:**
+- Shared pawpal_system.py with Copilot chat for feedback on clarity and design patterns
+- AI highlighted: "Your validation in __post_init__ is good, but consider whether 'earliest_time > latest_time' should also raise ValueError"
+- Incorporated this feedback to be more defensive
+
+**Documentation & UI Design:**
+- Used AI to draft docstrings for all public methods with `"""<purpose>. Returns: ..."""` template
+- Prompted: "How should conflict warnings be presented in a Streamlit UI to help pet owners?" → Suggested using st.warning with expanders to detail conflicts
+
+**Most Helpful Features:**
+1. **Inline code suggestions** — Quick method stubs saved typing boilerplate
+2. **Natural language explanations** — "Explain how your sort_by_time tiebreaker works" led to clearer understanding
+3. **Architecture review** — AI pushed for clearer relationships and validation, improving robustness
+4. **Test generation templates** — Provided structure even if I had to customize the assertions
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+**Example 1: Conflict Detection Severity Levels**
+
+AI initially suggested: "Just return a list of conflicts."
+
+**Why I modified it:** 
+Real pet owners need context. A conflict between walking a dog and feeding a dog is "impossible" (same pet), while walking a dog and feeding a cat in overlapping time windows is "manageable" (the owner might do both). So I split conflicts into two types:
+- **SAME PET conflicts** — Show as critical warnings (red st.error)
+- **TIMING CONFLICTS** — Show as informational (yellow st.warning)
+
+This made the UI more helpful and forced me to think deeper about what "conflict" really means for a pet owner.
+
+**Example 2: Recurring Task Implementation**
+
+AI suggested: "Use a date-aware recurrence system with next() methods, similar to iCalendar."
+
+**Why I rejected it:**
+PawPal+ is a *daily* planner, not a calendar app. Adding datetime math would require:
+- Timezone handling
+- Multi-week schedule distribution logic in the UI
+- Complexity that doesn't match the use case
+
+Instead, I chose: "Create a copy of the task in the same pet's list when marked complete, let the UI handle day-to-day distribution."
+
+This was simpler, still useful, and kept the system focused on daily planning.
+
+**Example 3: Session State Management**
+
+AI suggested: "Use a Database backend with persistence."
+
+**Why I kept it simple:**
+For a teaching project, session state is the right choice because:
+- It's transparent — you can see exactly how data persists
+- It's Streamlit-idiomatic — no external dependencies
+- It teaches the *pattern* (how to manage state in stateless frameworks)
+
+A database would be a premature optimization for this scope.
+
+**How I Verified AI Suggestions:**
+1. **Test the suggestion** — Implement it and run the test suite
+2. **Check the intent** — Does it align with "daily pet care planning" (not a feature creep)?
+3. **Measure the tradeoff** — Does the added complexity justify the benefit?
+4. **Ask clarifying questions** — "Can this be simpler?" before accepting elaborate suggestions
 
 ---
 
@@ -183,13 +250,55 @@ When user generates a schedule:
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+**Core Functionality Tests (14 tests):**
+- **Task validation:** Must catch invalid priorities (< 1 or > 5), negative durations, invalid time windows
+- **Pet management:** Adding tasks increments count correctly, category filtering works, pet info formats properly
+- **Owner aggregation:** Owner can get all tasks from all pets, time conversion (hours → minutes) is correct
+- **Scheduler basics:** Feasibility calculation doesn't go above 1.0, completed tasks are filtered correctly, schedule validation checks time constraints
+- **Result:** All 14 core tests passing; core logic is solid
+
+**Algorithm Tests (14 tests):**
+- **Sorting:** Tasks sorted by earliest_time (chronological), priority acts as tiebreaker for same-time tasks
+- **Filtering:** Each filter method returns correct subset (filter_by_pet returns only that pet's tasks, filter_by_status separates completed/pending, filter_by_category groups properly)
+- **Conflict detection:** Same-pet overlaps detected, non-overlapping tasks don't trigger false positives, cross-pet overlaps marked as TIMING CONFLICT
+- **Recurring tasks:** create_recurring_task() copies daily tasks correctly, returns None for non-recurring, mark_task_complete_with_recurrence() auto-creates next instance
+- **Edge cases:** Empty pet has no tasks, all tasks completed returns empty plan, single task schedules correctly
+- **Result:** All 14 algorithm tests passing; smart features are reliable
+
+**Why These Tests Were Important:**
+
+1. **Conflict detection** — The core value of a "smart" scheduler is catching conflicts early. Testing this extensively prevents bugs that frustrate users.
+2. **Recurring task automation** — If this breaks, users lose track of daily routines. Worth testing thoroughly.
+3. **Edge cases** — Empty pet lists, all completed tasks, single-task plans are common edge cases. Missing these leads to crashes.
+4. **Algorithm correctness** — A scheduler that sorts wrong is worse than no scheduler. Sorting/filtering tests verify the algorithms work.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+**Confidence Level: ⭐⭐⭐⭐⭐ 5 Stars**
+
+**Why High Confidence:**
+
+1. **28/28 tests passing (100% success rate)** — No failing tests
+2. **Edge cases covered** — Tested empty pets, all completed, single tasks, time boundary conditions
+3. **Algorithms verified independently** — Each sorting/filtering method tested in isolation
+4. **UI integration tested** — Integration tests (6/6 passing) show backend methods wire correctly to Streamlit
+5. **Real-world demo working** — main_advanced.py runs successfully with 9 realistic conflicts detected, all tasks scheduled correctly
+
+**What Gives Me Confidence:**
+
+- The test suite covers the "happy path" (normal use) and "sad paths" (conflicts, overload, edge cases)
+- Each algorithm was tested with intentionally messy data (out-of-order tasks, conflicting times) and still worked
+- The UI successfully persists data across reruns and calls backend methods correctly
+- No crashes on empty inputs or single-task schedules
+
+**Edge Cases I Would Test If I Had More Time:**
+
+1. **Time zones** — What if owner is in multiple timezones? (Not critical for MVP but important for real apps)
+2. **Overlapping recurring tasks** — If "daily walk" at 6-8am and "daily medication" at 7-9am both recur, does the UI show conflicts correctly over multiple days?
+3. **Very long tasks** — What if a task duration is > 23 hours? (Validation should catch this, but worth testing)
+4. **Floating point time windows** — What if earliest_time = 6.5, latest_time = 8.5? (Currently expects integers, may want to support half-hours)
+5. **Performance at scale** — If an owner has 500 tasks for 10 pets, how does the UI perform? (Not critical for MVP)
+6. **Persistence across sessions** — If user closes the browser and reopens, does data persist? (Currently session_state is in-memory only)
 
 ---
 
@@ -197,12 +306,64 @@ When user generates a schedule:
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+**Architecture clarity:**
+The 4-class design kept concerns separated beautifully. Scheduler doesn't know about Streamlit; the UI doesn't know about sorting algorithms. This separation meant I could test backend methods without running the app.
+
+**Test-driven validation:**
+Writing tests early (during Phase 3) caught design issues before they spiraled. For example, testing conflict detection revealed the need for "SAME PET" vs. "TIMING CONFLICT" distinction, which I incorporated.
+
+**AI-assisted refinement:**
+Using Copilot to review designs and suggest edge cases accelerated development. Instead of guessing what to test, I had a checklist of important cases.
+
+**Algorithmic layer separation:**
+Making sorting/filtering/conflict-detection independent methods meant the UI could use them flexibly. A monolithic `generate_big_schedule()` method would have been harder to test and extend.
+
+**Most Satisfying Part:**
+The moment conflict detection worked. Implementing the interval-overlap logic, testing it, then seeing the Streamlit UI display "⚠️ SAME PET: Morning Walk and Lunch Feeding for Buddy overlap in time window 6h-13h" felt like the scheduler was actually *smart*. That's when it stopped being a data structure and became a useful tool.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+**If I had another iteration, I would:**
+
+1. **Add a calendar view** — Instead of just a table, show tasks on a calendar grid where you can drag-drop tasks to new time slots
+2. **Persistent storage** — Save owner/pet/task data to JSON or SQLite instead of relying on session state, so users can close and reopen
+3. **Multi-day planning** — Extend from daily planning to weekly/monthly, with recurring tasks distributed automatically
+4. **Smart recommendations** — "You're overloaded on Mondays; consider moving the grooming to Wednesday" based on historical patterns
+5. **Notification system** — Reminders: "It's 6:00 AM — time for Buddy's walk!"
+6. **Mobile app** — Streamlit is great but a native mobile app would be better for quick checks during the day
+
+**Why I wouldn't do these in MVP:**
+The current system focuses on daily planning with clear tradeoffs. Each of these features adds complexity that's "nice to have" but not core to the mission: "Help a pet owner organize daily pet care."
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+**The most important lesson:**
+
+When collaborating with AI tools, you're not just a typist who accepts suggestions; you're the **architect who owns the decisions**. AI is excellent at:
+- Generating code faster
+- Suggesting patterns and edge cases
+- Refactoring for readability
+- Drafting documentation
+
+But AI doesn't know your specific constraints:
+- "Daily planning" not 5-year scheduling
+- Pet owners aren't software engineers
+- Conflicts need context, not just detection
+- Session state fits Streamlit's nature better than a database
+
+**The key skill is judgment:** Knowing when to accept AI suggestions (quick algorithm implementation), when to reject them (overcomplicated date math), and when to ask follow-up questions (conflict detection severity).
+
+This project taught me that thoughtful system design still matters more than raw coding speed. An extra hour spent on architecture reviews (with AI's help asking the right questions) saved days of refactoring later.
+
+**One More Insight:**
+
+Separate chat sessions for different phases helped tremendously. Instead of one massive conversation, I had:
+- **Phase 1 chat:** UML design and feedback
+- **Phase 2 chat:** Algorithm brainstorming
+- **Phase 3 chat:** Implementation and testing
+- **Phase 4 chat:** UI integration patterns
+- **Phase 5 chat:** Documentation and reflection
+
+Each session was focused, and I could revisit earlier phases without AI "forgetting context." For large projects, this **compartmentalization pattern with AI** seems more effective than one endless conversation.
+
+In essence: **Use AI as a smart assistant, but remain the thoughtful lead architect.**

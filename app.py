@@ -206,7 +206,50 @@ if st.session_state.owner.pets:
 st.divider()
 
 # ============================================================================
-# STEP 5: Generate and Display Schedule
+# STEP 5: Advanced Schedule Analysis (with Filtering & Algorithms)
+# ============================================================================
+st.subheader("🔍 Advanced Schedule Analysis")
+
+if len(st.session_state.owner.pets) == 0:
+    st.warning("Please add at least one pet and some tasks before analyzing.")
+elif not st.session_state.owner.get_all_tasks():
+    st.warning("Please add tasks to your pets before analyzing.")
+else:
+    # Create scheduler instance for analysis
+    scheduler = Scheduler(owner=st.session_state.owner)
+    
+    # Filtering sidebar
+    st.write("**Analysis Tools:**")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        filter_pet = st.selectbox("Filter by Pet:", ["All"] + [p.name for p in st.session_state.owner.pets])
+    
+    with col2:
+        filter_status = st.selectbox("Filter by Status:", ["Pending", "Completed", "All"])
+    
+    with col3:
+        filter_category = st.selectbox("Filter by Category:", 
+                                      ["All", "walk", "feeding", "medication", "grooming", "enrichment"])
+    
+    # Apply filters
+    filtered_tasks = scheduler.tasks.copy()
+    
+    if filter_pet != "All":
+        filtered_tasks = scheduler.filter_by_pet(filter_pet)
+    
+    if filter_status == "Pending":
+        filtered_tasks = [t for t in filtered_tasks if not t.completed]
+    elif filter_status == "Completed":
+        filtered_tasks = [t for t in filtered_tasks if t.completed]
+    
+    if filter_category != "All":
+        filtered_tasks = [t for t in filtered_tasks if t.category == filter_category]
+    
+    st.divider()
+
+# ============================================================================
+# STEP 6: Generate and Display Schedule
 # ============================================================================
 st.subheader("📅 Generate Daily Schedule")
 
@@ -219,7 +262,7 @@ else:
         # Create scheduler instance
         scheduler = Scheduler(owner=st.session_state.owner)
         
-        # Generate the plan
+        # Generate the plan (sorted by priority, then by time)
         daily_plan = scheduler.generate_daily_plan()
         
         # Display metrics
@@ -244,41 +287,77 @@ else:
         
         st.divider()
         
-        # Display schedule
+        # ====== CONFLICT DETECTION ======
+        conflicts = scheduler.detect_conflicts(daily_plan)
+        
+        if conflicts:
+            st.warning("⚠️ Schedule Conflicts Detected")
+            for conflict_idx, (task1, task2, msg) in enumerate(conflicts, 1):
+                with st.expander(f"Conflict {conflict_idx}: {task1.name} ↔ {task2.name}", expanded=False):
+                    st.markdown(msg)
+                    st.info(f"**Recommendation:** Review time windows for these tasks or adjust priorities.")
+        else:
+            st.success("✓ No scheduling conflicts detected!")
+        
+        st.divider()
+        
+        # ====== TIME-SORTED SCHEDULE ======
         if daily_plan:
-            st.write("**Today's Optimized Schedule:**")
+            st.write("**Today's Optimized Schedule (sorted by time):**")
+            
+            # Sort by time for chronological display
+            time_sorted = scheduler.sort_by_time(daily_plan)
             
             schedule_display = []
-            cumulative_time = 0
             
-            for i, task in enumerate(daily_plan, 1):
+            for i, task in enumerate(time_sorted, 1):
                 start_hour = task.earliest_time
-                end_hour = start_hour + (task.duration // 60)
+                duration_hours = task.duration / 60
+                end_hour = start_hour + duration_hours
+                
+                # Check if task is recurring
+                recurring_indicator = f"🔄 {task.frequency}" if task.frequency in ["daily", "weekly", "twice_daily"] else ""
                 
                 schedule_display.append({
                     "#": i,
                     "Task": task.name,
                     "Pet": task.pet_name,
-                    "Time": f"{start_hour}:00 - {end_hour}:00",
+                    "Time": f"{int(start_hour):02d}:{int((start_hour % 1) * 60):02d} - {int(end_hour):02d}:{int((end_hour % 1) * 60):02d}",
                     "Duration": f"{task.duration}m",
                     "Priority": "⭐" * task.priority,
-                    "Category": task.category.capitalize()
+                    "Type": task.category.capitalize(),
+                    "Recurring": recurring_indicator
                 })
-                cumulative_time += task.duration
             
             st.table(schedule_display)
             
+            # ====== VALIDITY CHECK ======
             if not is_valid:
                 st.error(
-                    f"⚠️ Schedule exceeds available time! "
+                    f"⚠️ **Schedule exceeds available time!** "
                     f"Tasks need {total_time}m but only {available_time}m available. "
                     f"Consider removing lower-priority tasks or increasing available time."
                 )
             else:
                 time_remaining = available_time - total_time
                 st.success(
-                    f"✓ Schedule fits! {time_remaining}m remaining for breaks or flexibility."
+                    f"✓ **Schedule fits perfectly!** {time_remaining}m remaining for breaks or flexibility."
                 )
+            
+            # ====== TASK BREAKDOWN BY CATEGORY ======
+            st.divider()
+            st.write("**Task Breakdown by Category:**")
+            
+            category_breakdown = {}
+            for task in daily_plan:
+                if task.category not in category_breakdown:
+                    category_breakdown[task.category] = 0
+                category_breakdown[task.category] += task.duration
+            
+            for category, duration in sorted(category_breakdown.items()):
+                pct = (duration / total_time * 100) if total_time > 0 else 0
+                st.progress(pct / 100, text=f"{category.capitalize()}: {duration}m ({pct:.0f}%)")
+            
         else:
             st.info("All tasks are already completed for today!")
 
