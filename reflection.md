@@ -14,13 +14,48 @@ The following three core actions define what users should be able to perform in 
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+**UML Overview:**
+I designed a four-class system to separate concerns and enable clean data flow:
+
+1. **Owner** — Manages owner information and constraints
+   - Attributes: name, available_hours_per_day, preferences (dict)
+   - Responsibilities: Track owner availability and update preferences
+   - Methods: get_available_time(), update_preferences()
+
+2. **Pet** — Represents a pet that receives care
+   - Attributes: name, species, age, special_needs (list)
+   - Responsibilities: Hold pet information needed for task prioritization
+   - Methods: get_info()
+
+3. **Task** — Represents a single pet care activity
+   - Attributes: name, duration (minutes), priority (1-5), category (walk/feeding/meds/etc.), frequency
+   - Responsibilities: Encapsulate task details and provide priority/string representations
+   - Methods: get_priority(), to_string()
+
+4. **Scheduler** — Orchestrates daily planning by combining owner availability, pet needs, and task constraints
+   - Attributes: owner (Owner), pets (List[Pet]), tasks (List[Task])
+   - Responsibilities: Generate feasible daily schedules, validate plans, calculate feasibility scores
+   - Methods: generate_daily_plan(), validate_schedule(), calculate_feasibility()
+
+**Relationships:**
+- Owner owns one or more Pets
+- Scheduler references an Owner, manages Pets, and schedules Tasks
+- This separation allows Tasks to be independent of specific owners/pets initially, then bound during scheduling
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+**Changes made after Copilot code review:**
+
+1. **Added pet_name to Task** — Tasks now explicitly reference which pet they're for (e.g., pet_name="Buddy"). This creates a clear many-to-one relationship and prevents the scheduler from assigning a "walk" task meant for a dog to a cat.
+
+2. **Added time-window constraints to Task** — Added earliest_time and latest_time attributes to capture scheduling windows (e.g., walks only between 6-8am, medications always at noon). This allows the scheduler to respect pet-specific timing needs without adding a separate constraint class.
+
+3. **Added validation with __post_init__** — Implemented dataclass post-initialization to validate priority (1-5), positive duration, and valid time ranges. This catches invalid data early and prevents invalid schedules during generation.
+
+**Why these changes help:**
+- **Clarity:** Tasks now explicitly bind to pets, making the Scheduler's logic simpler
+- **Flexibility:** Time windows remove the need for a separate Constraint class while capturing the most common constraints
+- **Robustness:** Validation prevents garbage data from propagating to the scheduler
 
 ---
 
