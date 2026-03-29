@@ -1,10 +1,11 @@
 """
 PawPal+ System - Core logic layer with Owner, Pet, Task, and Scheduler classes.
+Includes sorting, filtering, recurring tasks, and conflict detection algorithms.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
-from datetime import datetime
+from typing import List, Dict, Optional, Tuple
+from datetime import datetime, timedelta
 
 
 @dataclass
@@ -165,4 +166,149 @@ class Scheduler:
         
         feasibility = available_minutes / total_duration
         return min(feasibility, 1.0)  # Cap at 1.0
+    
+    # ========================================================================
+    # STEP 2: SORTING AND FILTERING ALGORITHMS
+    # ========================================================================
+    
+    def sort_by_time(self, tasks: List[Task]) -> List[Task]:
+        """
+        Sort tasks by their time window (earliest_time ascending).
+        Useful for time-aware scheduling where tasks should happen in chronological order.
+        
+        Args:
+            tasks: List of tasks to sort
+            
+        Returns:
+            New list sorted by earliest_time (then by priority descending as tiebreaker)
+        """
+        return sorted(tasks, key=lambda t: (t.earliest_time, -t.priority))
+    
+    def filter_by_pet(self, pet_name: str) -> List[Task]:
+        """
+        Get all tasks for a specific pet.
+        
+        Args:
+            pet_name: Name of the pet to filter by
+            
+        Returns:
+            List of tasks belonging to that pet
+        """
+        return [t for t in self.tasks if t.pet_name == pet_name]
+    
+    def filter_by_status(self, completed: bool = False) -> List[Task]:
+        """
+        Get all tasks with a specific completion status.
+        
+        Args:
+            completed: If True, return completed tasks; if False, return pending tasks
+            
+        Returns:
+            List of tasks matching the status
+        """
+        return [t for t in self.tasks if t.completed == completed]
+    
+    def filter_by_category(self, category: str) -> List[Task]:
+        """
+        Get all tasks in a specific category.
+        
+        Args:
+            category: Category to filter by (e.g., "walk", "feeding", "medication")
+            
+        Returns:
+            List of tasks in that category
+        """
+        return [t for t in self.tasks if t.category == category]
+    
+    # ========================================================================
+    # STEP 4: CONFLICT DETECTION ALGORITHM
+    # ========================================================================
+    
+    def detect_conflicts(self, plan: Optional[List[Task]] = None) -> List[Tuple[Task, Task, str]]:
+        """
+        Detect tasks scheduled at the same time for the same or different pets.
+        Returns a list of conflicts with explanation.
+        
+        Algorithm: Check if any two tasks overlap in their time windows.
+        Overlap occurs if: task1.earliest_time <= task2.latest_time AND task2.earliest_time <= task1.latest_time
+        
+        Args:
+            plan: List of tasks to check (if None, checks all incomplete tasks)
+            
+        Returns:
+            List of tuples (task1, task2, conflict_message) for each conflict found
+        """
+        if plan is None:
+            plan = self.filter_by_status(completed=False)
+        
+        conflicts = []
+        
+        # Compare each task with every other task
+        for i in range(len(plan)):
+            for j in range(i + 1, len(plan)):
+                task1 = plan[i]
+                task2 = plan[j]
+                
+                # Check for time overlap
+                # Conflict if: task1_start <= task2_end AND task2_start <= task1_end
+                if task1.earliest_time <= task2.latest_time and task2.earliest_time <= task1.latest_time:
+                    # Only flag if same pet or owner can't do both at once
+                    if task1.pet_name == task2.pet_name:
+                        msg = f"SAME PET: '{task1.name}' and '{task2.name}' for {task1.pet_name} overlap in time window {task1.earliest_time}h-{task2.latest_time}h"
+                    else:
+                        msg = f"TIMING CONFLICT: '{task1.name}' ({task1.pet_name}) and '{task2.name}' ({task2.pet_name}) scheduled in same time window ({task1.earliest_time}h-{task2.latest_time}h)"
+                    
+                    conflicts.append((task1, task2, msg))
+        
+        return conflicts
+    
+    # ========================================================================
+    # STEP 3: RECURRING TASK AUTOMATION
+    # ========================================================================
+    
+    def create_recurring_task(self, task: Task) -> Optional[Task]:
+        """
+        Create the next occurrence of a recurring task.
+        For "daily" tasks, creates a copy for tomorrow.
+        For "weekly" tasks, creates a copy for next week.
+        
+        Args:
+            task: The completed task to recur
+            
+        Returns:
+            New Task instance for next occurrence, or None if not recurring
+        """
+        if task.frequency not in ["daily", "weekly", "twice_daily"]:
+            return None  # Task doesn't recur
+        
+        # Create a copy of the task
+        next_task = Task(
+            name=task.name,
+            duration=task.duration,
+            priority=task.priority,
+            category=task.category,
+            pet_name=task.pet_name,
+            frequency=task.frequency,
+            earliest_time=task.earliest_time,
+            latest_time=task.latest_time,
+            completed=False
+        )
+        
+        return next_task
+    
+    def mark_task_complete_with_recurrence(self, task: Task, pet: Pet) -> None:
+        """
+        Mark a task as complete and auto-create the next occurrence if it's recurring.
+        
+        Args:
+            task: Task to mark complete
+            pet: Pet that owns this task (so we can add the new recurring instance)
+        """
+        task.mark_complete()
+        
+        # If task recurs, create and add the next occurrence
+        if task.frequency in ["daily", "weekly", "twice_daily"]:
+            next_task = self.create_recurring_task(task)
+            if next_task:
+                pet.add_task(next_task)
 
