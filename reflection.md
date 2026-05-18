@@ -5,7 +5,18 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+Initial design is centered around five main classes: "Owner", "Pet", "Task", "Scheduler", and "Plan".
+This separates the data, the core logic, and the final output. 
+
 - What classes did you include, and what responsibilities did you assign to each?
+Owner: Represents the user, holding their name and key constraints, such as their total available time for pet care.
+Pet: Represents the pet and stores basic information like its name and type.
+Task: Represents a single care activity, containing attributes like its name, duration, and priority level.
+
+Main logic classes:
+Scheduler class. Its job is to take a list of all Task objects and the Owner's constraints (like available time) and apply a scheduling algorithm to figure out which tasks can be done.
+Finally, the output of the Scheduler is a Schedule object. This class represents the generated daily plan, holding a finalized list of Task objects that fit within the owner's constraints, sorted by priority.
+
 
 **b. Design changes**
 
