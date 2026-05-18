@@ -21,7 +21,10 @@ Finally, the output of the Scheduler is a Schedule object. This class represents
 **b. Design changes**
 
 - Did your design change during implementation?
+Yes
 - If yes, describe at least one change and why you made it.
+If the system needed to support multiple pets, each with their own specific tasks, this relationship would be essential. You would likely want to add pets: List[Pet] to the Owner class.
+
 
 ---
 
