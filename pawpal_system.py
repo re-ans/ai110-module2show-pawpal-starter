@@ -1,6 +1,7 @@
 # pawpal_system.py
 from dataclasses import dataclass, field
 from typing import List
+from datetime import date, timedelta
 
 @dataclass
 class Task:
@@ -10,15 +11,37 @@ class Task:
     priority: int  # lower number means higher priority
     frequency: str = "daily"  # e.g., "daily", "weekly"
     completed: bool = False
+    due_date: date = field(default_factory=date.today)
+    start_time: int = 0 # Time in minutes from the start of the schedule
 
-    def mark_complete(self):
-        """Marks the task as completed."""
+    def mark_complete(self, pet: "Pet"):
+        """
+        Marks the task as completed and, if it is a recurring task (daily/weekly),
+        creates a new instance of the task for the next scheduled occurrence.
+
+        Args:
+            pet (Pet): The pet to whom the recurring task will be added.
+        """
         self.completed = True
+        
+        new_task = None
+        if self.frequency == "daily":
+            new_due_date = self.due_date + timedelta(days=1)
+            new_task = Task(name=self.name, duration=self.duration, priority=self.priority, frequency=self.frequency, due_date=new_due_date)
+        elif self.frequency == "weekly":
+            new_due_date = self.due_date + timedelta(days=7)
+            new_task = Task(name=self.name, duration=self.duration, priority=self.priority, frequency=self.frequency, due_date=new_due_date)
+        
+        if new_task:
+            pet.add_task(new_task)
 
     def get_task_info(self) -> str:
-        """Returns a formatted string with the task's details."""
+        """
+        Returns a formatted string with the task's details, including its
+        completion status, duration, priority, due date, and scheduled start time.
+        """
         status = "✓" if self.completed else "✗"
-        return f"[{status}] {self.name} ({self.duration} mins, P{self.priority}, {self.frequency})"
+        return f"[{status}] {self.name} ({self.duration} mins, P{self.priority}, due: {self.due_date.strftime('%Y-%m-%d')}, start: {self.start_time} minutes)"
 
 @dataclass
 class Pet:
@@ -79,8 +102,8 @@ class Scheduler:
         all_tasks = [task for task in owner.get_all_tasks() if not task.completed]
         available_time = owner.get_availability()
 
-        # 2. Sort tasks by priority
-        sorted_tasks = sorted(all_tasks, key=lambda task: task.priority)
+        # 2. Sort tasks by priority (primary) and duration (secondary)
+        sorted_tasks = sorted(all_tasks, key=lambda task: (task.priority, task.duration))
         
         remaining_time = available_time
         
@@ -93,7 +116,17 @@ class Scheduler:
         return self
 
     def _add_task(self, task: Task):
-        """Adds a single task to the scheduler's plan."""
+        """
+        An internal method to add a task to the schedule.
+
+        This method appends a task to the `scheduled_tasks` list, sets the task's
+        `start_time` based on the current total duration of the plan, and updates
+        the `total_duration`.
+
+        Args:
+            task (Task): The task to be added to the schedule.
+        """
+        task.start_time = self.total_duration # Set start time before adding duration
         self.scheduled_tasks.append(task)
         self.total_duration += task.duration
 
@@ -101,8 +134,54 @@ class Scheduler:
         """Returns the total duration of all scheduled tasks."""
         return self.total_duration
 
+    def sort_by_time(self):
+        """Sorts the scheduled tasks by their duration."""
+        self.scheduled_tasks.sort(key=lambda task: task.duration)
+    
+    def filter_by_completion(self, completed: bool) -> List[Task]:
+        """Returns a list of tasks filtered by their completion status."""
+        return [task for task in self.scheduled_tasks if task.completed == completed]
+
+    def detect_conflicts(self) -> List[tuple[Task, Task]]:
+        """
+        Detects if any two tasks in the schedule have overlapping times.
+
+        This method iterates through all pairs of scheduled tasks and checks for
+        any overlap in their start and end times. Because the current scheduling
+        logic is a simple back-to-back sequence, a true conflict can only occur
+        if two tasks have the exact same start time.
+
+        Returns:
+            List[tuple[Task, Task]]: A list of tuples, where each tuple contains
+            two tasks that are in conflict with each other. An empty list is
+            returned if no conflicts are found.
+        """
+        conflicts = []
+        # Sort tasks by start time to make comparison easier
+        sorted_plan = sorted(self.scheduled_tasks, key=lambda t: t.start_time)
+        
+        for i in range(len(sorted_plan)):
+            for j in range(i + 1, len(sorted_plan)):
+                task1 = sorted_plan[i]
+                task2 = sorted_plan[j]
+                
+                # An overlap occurs if one task starts before the other one ends
+                if task1.start_time < (task2.start_time + task2.duration) and \
+                   (task1.start_time + task1.duration) > task2.start_time:
+                    # In our current simple model, a conflict is only possible if start times are identical
+                    if task1.start_time == task2.start_time:
+                        conflicts.append((task1, task2))
+        return conflicts
+
     def display_plan(self):
-        """Prints the formatted schedule to the console."""
+        """
+        Prints the formatted schedule to the console and warns about conflicts.
+
+        This method first checks if there are any scheduled tasks. If so, it
+        prints each task's name and duration, followed by the total time for
+        the entire plan. It then automatically calls `detect_conflicts()` and,
+        if any are found, prints a formatted warning to the console.
+        """
         if not self.scheduled_tasks:
             print("No tasks could be scheduled with the available time.")
             return
@@ -112,5 +191,13 @@ class Scheduler:
             print(f"- {task.name} ({task.duration} minutes)")
         print(f"--------------------------")
         print(f"Total Time: {self.total_duration} minutes")
+
+        # Add a warning for any scheduling conflicts
+        conflicts = self.detect_conflicts()
+        if conflicts:
+            print("\n--- WARNING: Scheduling Conflicts Detected! ---")
+            for task1, task2 in conflicts:
+                print(f"  - Conflict: '{task1.name}' and '{task2.name}' are scheduled at the same time.")
+            print("---------------------------------------------")
 
 

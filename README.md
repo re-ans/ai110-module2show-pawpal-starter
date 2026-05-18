@@ -41,3 +41,10 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+### Smarter Scheduling
+Summarize the new features:
+- Support for multiple pets, each with their own specific tasks.
+- The Owner class now includes a list of Pet objects, allowing for better organization and management of tasks related to each pet.
+- The Scheduler class has been updated to consider the tasks of all pets when generating the daily plan, ensuring that the schedule is comprehensive and accounts for the needs of all pets.
+
