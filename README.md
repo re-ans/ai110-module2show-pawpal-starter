@@ -48,3 +48,16 @@ Summarize the new features:
 - The Owner class now includes a list of Pet objects, allowing for better organization and management of tasks related to each pet.
 - The Scheduler class has been updated to consider the tasks of all pets when generating the daily plan, ensuring that the schedule is comprehensive and accounts for the needs of all pets.
 
+### Testing PawPal+
+Run the test suite with:
+```bash
+python3 -m pytest
+```
+Tests verify key scheduling behaviors including:
+- Task scheduling and time conflict detection
+- Priority-based task ordering
+- Multiple pet support and task aggregation
+- Edge cases (overlapping tasks, insufficient time slots)
+Confidence level: 4 stars. The tests cover a wide range of scenarios, but additional edge cases could be explored with more time.
+
+
