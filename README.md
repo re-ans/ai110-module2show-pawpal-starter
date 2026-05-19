@@ -66,4 +66,4 @@ Tests verify key scheduling behaviors including:
 - Multiple pet support and task aggregation
 - Edge cases (overlapping tasks, insufficient time slots)
 Confidence level: 4 stars. The tests cover a wide range of scenarios, but additional edge cases could be explored with more time.
-<img src="demo.png" alt="PawPal+ Demo" width="400"/></a>
+<img src="demo.png" alt="PawPal+ Demo"></a>
