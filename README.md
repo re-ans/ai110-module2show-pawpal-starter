@@ -48,6 +48,13 @@ Summarize the new features:
 - The Owner class now includes a list of Pet objects, allowing for better organization and management of tasks related to each pet.
 - The Scheduler class has been updated to consider the tasks of all pets when generating the daily plan, ensuring that the schedule is comprehensive and accounts for the needs of all pets.
 
+### Features
+
+*   **Intelligent Task Scheduling:** Generates an optimized daily plan based on task priority, duration, and your available time.
+*   **Multi-Factor Sorting:** Sorts tasks first by priority, then by duration, to ensure critical and quick tasks are handled efficiently.
+*   **Automatic Recurring Tasks:** When a "daily" or "weekly" task is completed, a new one is automatically created for the next occurrence.
+*   **Conflict Detection:** Automatically identifies and warns you if two or more tasks are scheduled at the same time.
+
 ### Testing PawPal+
 Run the test suite with:
 ```bash
@@ -59,5 +66,4 @@ Tests verify key scheduling behaviors including:
 - Multiple pet support and task aggregation
 - Edge cases (overlapping tasks, insufficient time slots)
 Confidence level: 4 stars. The tests cover a wide range of scenarios, but additional edge cases could be explored with more time.
-
-
+<img src="demo.png" alt="PawPal+ Demo" width="400"/></a>
